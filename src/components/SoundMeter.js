@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import './SoundMeter.module.css';
 
 const SoundMeter = () => {
     const [isListening, setIsListening] = useState(false);
+    const [opacity, setOpacity] = useState(1);
     const audioContext = useRef(null);
     const analyser = useRef(null);
     const dataArray = useRef(null);
+    const animationFrameId = useRef(null);
+    const streamRef = useRef(null);
 
     useEffect(() => {
         if (isListening) {
@@ -19,19 +23,16 @@ const SoundMeter = () => {
                     source.connect(analyser.current);
 
                     dataArray.current = new Uint8Array(analyser.current.frequencyBinCount);
-                    
+                    streamRef.current = stream;
+
                     const updateMeter = () => {
                         analyser.current.getByteFrequencyData(dataArray.current);
                         const max = Math.max(...dataArray.current); // Get the maximum frequency value
-                        const opacity = max / 256; // Normalize to [0, 1]
-                        
-                        // Update the circle's opacity
-                        const circleButton = document.querySelector('.circle-button');
-                        circleButton.style.opacity = opacity;
+                        setOpacity(max / 256); // Normalize to [0, 1]
 
-                        requestAnimationFrame(updateMeter); // Schedule the next update
+                        animationFrameId.current = requestAnimationFrame(updateMeter); // Schedule the next update
                     };
-                    
+
                     updateMeter();
                 })
                 .catch((error) => {
@@ -40,9 +41,19 @@ const SoundMeter = () => {
                 });
 
             return () => {
+                // Cleanup audio context and stop the stream
                 if (audioContext.current) {
                     audioContext.current.close();
+                    audioContext.current = null;
                 }
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => track.stop());
+                    streamRef.current = null;
+                }
+                if (animationFrameId.current) {
+                    cancelAnimationFrame(animationFrameId.current);
+                }
+                setOpacity(1); // Reset opacity to 1 when not listening
             };
         }
     }, [isListening]);
@@ -54,13 +65,12 @@ const SoundMeter = () => {
     return (
         <div>
             <button
-                className={`w-[200px] h-[200px] rounded-full bg-white text-black active:bg-gray-200 circle-button ${
-                    isListening ? 'opacity-100' : 'opacity-50'
-                }`}
+                className={`w-[200px] h-[200px] rounded-full bg-white text-black active:bg-gray-200 circle-button`}
                 onClick={toggleListening}
-            >
-                {isListening ? 'Listening...' : 'Start Listening'}
-            </button>
+                style={{
+                    boxShadow: isListening ? `0 0 ${opacity * 50}px rgba(255, 255, 255, ${opacity})` : 'none'
+                }}
+            ></button>
         </div>
     );
 };
